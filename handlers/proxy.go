@@ -14,6 +14,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// ProxyServer is the server to reverse requests.
 type ProxyServer struct {
 	Addr string
 	// Browser records user's name
@@ -62,10 +63,14 @@ func NewProxyServer() *ProxyServer {
 	//	MaxHeaderBytes: 1 << 20,
 	//}
 }
+
+// ListenAndServe serves HTTP requests from the given TCP addr
+// using fasthttp.
 func (ps *ProxyServer) ListenAndServe() error {
 	return fasthttp.ListenAndServe(ps.Addr, ps.HandleFastHTTP)
 }
 
+// HandleFastHTTP requests handler in fasthttp style.
 func (ps *ProxyServer) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 	proxyLog.WithFields(logrus.Fields{
 		"request user":   ps.Browser,

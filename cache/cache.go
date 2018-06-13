@@ -12,6 +12,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// HttpCache is the entity of http cache.
 type HttpCache struct {
 	Header       *fasthttp.ResponseHeader `json:"header"`
 	Body         io.Writer                  `json:"body"`
@@ -25,6 +26,7 @@ type HttpCache struct {
 	maxAge  int64     `json:"-"`
 }
 
+// NewCacheResp create a new HttpCache instance.
 func NewCacheResp(resp *fasthttp.Response) *HttpCache {
 	c := new(HttpCache)
 	c.Header = new(fasthttp.ResponseHeader)
@@ -116,7 +118,7 @@ func (c *HttpCache) Verify() bool {
 	return false
 }
 
-// CacheHandler handles "Get" request
+// WriteTo write response into HttpCache.
 func (c *HttpCache) WriteTo(resp *fasthttp.Response) (int64, error) {
 
 	handlers.CopyHeaders(&resp.Header, c.Header)
@@ -127,7 +129,7 @@ func (c *HttpCache) WriteTo(resp *fasthttp.Response) (int64, error) {
 }
 
 
-//getAge from Cache Control get cache's lifetime.
+// getAge from Cache Control get cache's lifetime.
 func getAge(cacheControl string) (age int64) {
 	f := func(sage string) int64 {
 		var tmpAge int64

@@ -42,6 +42,7 @@ func init() {
 	boundedLB = bounded.New(serverNodes...)
 }
 
+// Done decrments one host.
 func (ps *ProxyServer) Done(req *fasthttp.Request) {
 	switch config.RuntimeViper.GetInt("server.inverse_mode") {
 	case 2:

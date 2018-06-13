@@ -19,6 +19,7 @@ func init() {
 	cacheLog, _ = tool.InitLog(path.Join(logPath, "cache.log"))
 }
 
+// RegisterCachePool register a new cache-pool.
 func RegisterCachePool(c api.CachePool) {
 	cachePool = c
 }

@@ -10,7 +10,7 @@ func CopyHeaders(dst, src *fasthttp.ResponseHeader) {
 	src.CopyTo(dst)
 }
 
-// RmProxyHeaders remove Hop-by-hop headers.
+// RmProxyReqHeaders remove Hop-by-hop headers.
 func RmProxyReqHeaders(req *fasthttp.Request) {
 	req.SetRequestURI("")
 	req.Header.Del("Proxy-Connection")
@@ -24,6 +24,7 @@ func RmProxyReqHeaders(req *fasthttp.Request) {
 	req.Header.Del("Upgrade")
 }
 
+// RmProxyRespHeaders remove Hop-by-hop headers.
 func RmProxyRespHeaders(resp *fasthttp.Response) {
 	resp.Header.Del("Proxy-Connection")
 	resp.Header.Del("Connection")
