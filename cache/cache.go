@@ -1,46 +1,47 @@
 package cache
 
 import (
-	// "io"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/panjf2000/goproxy/config"
+	"github.com/panjf2000/goproxy/handlers"
+	"github.com/valyala/fasthttp"
 )
 
 type HttpCache struct {
-	Header       http.Header `json:"header"`
-	Body         []byte      `json:"body"`
-	StatusCode   int         `json:"status_code"`
-	URI          string      `json:"url"`
-	LastModified string      `json:"last_modified"` //eg:"Fri, 27 Jun 2014 07:19:49 GMT"
-	ETag         string      `json:"etag"`
-	Mustverified bool        `json:"must_verified"`
+	Header       *fasthttp.ResponseHeader `json:"header"`
+	Body         io.Writer                  `json:"body"`
+	StatusCode   int                     `json:"status_code"`
+	URI          string                  `json:"url"`
+	LastModified string                  `json:"last_modified"` //eg:"Fri, 27 Jun 2014 07:19:49 GMT"
+	ETag         string                  `json:"etag"`
+	Mustverified bool                    `json:"must_verified"`
 	//Vlidity is a time when to verfiy the cache again.
 	Vlidity time.Time `json:"vlidity"`
 	maxAge  int64     `json:"-"`
 }
 
-func NewCacheResp(resp *http.Response) *HttpCache {
+func NewCacheResp(resp *fasthttp.Response) *HttpCache {
 	c := new(HttpCache)
-	c.Header = make(http.Header)
-	CopyHeaders(c.Header, resp.Header)
-	c.StatusCode = resp.StatusCode
+	c.Header = new(fasthttp.ResponseHeader)
+	handlers.CopyHeaders(c.Header, &resp.Header)
+	c.StatusCode = resp.Header.StatusCode()
 
 	var err error
-	c.Body, err = ioutil.ReadAll(resp.Body)
+	c.Body = resp.BodyWriter()
 
 	if c.Header == nil {
 		return nil
 	}
 
-	c.ETag = c.Header.Get("ETag")
-	c.LastModified = c.Header.Get("Last-Modified")
+	c.ETag = string(c.Header.Peek("ETag"))
+	c.LastModified = string(c.Header.Peek("Last-Modified"))
 
-	cacheControl := c.Header.Get("Cache-Control")
+	cacheControl := string(c.Header.Peek("Cache-Control"))
 
 	// no-cache means you should verify data before use cache.
 	// only use cache when remote server returns 302 status.
@@ -52,7 +53,7 @@ func NewCacheResp(resp *http.Response) *HttpCache {
 	}
 	c.Mustverified = true
 
-	if Expires := c.Header.Get("Expires"); Expires != "" {
+	if Expires := string(c.Header.Peek("Expires")); Expires != "" {
 		c.Vlidity, err = time.Parse(http.TimeFormat, Expires)
 		if err != nil {
 			return nil
@@ -63,7 +64,7 @@ func NewCacheResp(resp *http.Response) *HttpCache {
 	maxAge := getAge(cacheControl)
 	if maxAge != -1 {
 		var Time time.Time
-		date := c.Header.Get("Date")
+		date := string(c.Header.Peek("Date"))
 		if date == "" {
 			Time = time.Now().UTC()
 		} else {
@@ -116,24 +117,15 @@ func (c *HttpCache) Verify() bool {
 }
 
 // CacheHandler handles "Get" request
-func (c *HttpCache) WriteTo(rw http.ResponseWriter) (int, error) {
+func (c *HttpCache) WriteTo(resp *fasthttp.Response) (int64, error) {
 
-	CopyHeaders(rw.Header(), c.Header)
-	rw.WriteHeader(c.StatusCode)
+	handlers.CopyHeaders(&resp.Header, c.Header)
 
-	return rw.Write(c.Body)
+	return resp.WriteTo(c.Body)
+	//return resp.Write(c.Body)
 
 }
 
-// CopyHeaders copy headers from source to destination.
-// Nothing would be returned.
-func CopyHeaders(dst, src http.Header) {
-	for key, values := range src {
-		for _, value := range values {
-			dst.Add(key, value)
-		}
-	}
-}
 
 //getAge from Cache Control get cache's lifetime.
 func getAge(cacheControl string) (age int64) {

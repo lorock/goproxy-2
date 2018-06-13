@@ -6,18 +6,20 @@ import (
 	"net"
 	"net/http"
 	"path"
-	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/panjf2000/goproxy/cache"
 	"github.com/panjf2000/goproxy/config"
 	"github.com/panjf2000/goproxy/tool"
+	"github.com/valyala/fasthttp"
 )
 
 type ProxyServer struct {
+	Addr string
 	// Browser records user's name
-	Travel  *http.Transport
 	Browser string
+	Client  *fasthttp.HostClient
+	Server  *fasthttp.Server
 }
 
 var proxyLog *logrus.Logger
@@ -29,86 +31,64 @@ func init() {
 }
 
 // NewProxyServer returns a new proxyserver.
-func NewProxyServer() *http.Server {
+func NewProxyServer() *ProxyServer {
 	if config.RuntimeViper.GetBool("server.cache") {
 		RegisterCachePool(cache.NewCachePool(config.RuntimeViper.GetString("redis.redis_host"),
 			config.RuntimeViper.GetString("redis.redis_pass"), config.RuntimeViper.GetInt("redis.idle_timeout"),
 			config.RuntimeViper.GetInt("redis.max_active"), config.RuntimeViper.GetInt("redis.max_idle")))
 	}
 
-	return &http.Server{
-		Addr:           config.RuntimeViper.GetString("server.port"),
-		Handler:        &ProxyServer{Travel: &http.Transport{Proxy: http.ProxyFromEnvironment, DisableKeepAlives: true}},
-		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
-		MaxHeaderBytes: 1 << 20,
+	//server := &fasthttp.Server{
+	//	Name:         config.RuntimeViper.GetString("server.name"),
+	//	Handler:      proxyServer.HandleFastHTTP,
+	//	ReadTimeout:  10 * time.Second,
+	//	WriteTimeout: 10 * time.Second,
+	//}
+	proxyServer := &ProxyServer{
+		Addr: config.RuntimeViper.GetString("server.port"),
+		Client: &fasthttp.HostClient{
+			IsTLS: false,
+			Addr:  "",
+			// set other options here if required - most notably timeouts.
+			// ReadTimeout: 60, // 如果在生产环境启用会出现多次请求现象
+		},
 	}
+	return proxyServer
+	//return &http.Server{
+	//	Addr:           config.RuntimeViper.GetString("server.port"),
+	//	Handler:        &ProxyServer{Travel: &http.Transport{Proxy: http.ProxyFromEnvironment, DisableKeepAlives: true}},
+	//	ReadTimeout:    10 * time.Second,
+	//	WriteTimeout:   10 * time.Second,
+	//	MaxHeaderBytes: 1 << 20,
+	//}
+}
+func (ps *ProxyServer) ListenAndServe() error {
+	return fasthttp.ListenAndServe(ps.Addr, ps.HandleFastHTTP)
 }
 
-//ServeHTTP will be automatically called by system.
-//ProxyServer implements the Handler interface which need ServeHTTP.
-func (ps *ProxyServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	defer func() {
-		if err := recover(); err != nil {
-			rw.WriteHeader(http.StatusInternalServerError)
-			proxyLog.WithFields(logrus.Fields{
-				"panic": err,
-			}).Panic("Call a panic!")
-		}
-	}()
-	if !ps.Auth(rw, req) {
-		return
-	}
-
-	ps.LoadBalancing(req)
-
-	if req.Method == "CONNECT" {
-		ps.HttpsHandler(rw, req)
-	} else if req.Method == "GET" && config.RuntimeViper.GetBool("server.cache") {
-		ps.CacheHandler(rw, req)
-	} else {
-		ps.HttpHandler(rw, req)
-	}
-	ps.Done(req)
-}
-
-//HttpHandler handles http connections.
-//处理普通的http请求
-func (ps *ProxyServer) HttpHandler(rw http.ResponseWriter, req *http.Request) {
+func (ps *ProxyServer) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 	proxyLog.WithFields(logrus.Fields{
 		"request user":   ps.Browser,
-		"request method": req.Method,
-		"request url":    req.URL.Host,
+		"request method": string(ctx.Method()),
+		"request url":    string(ctx.Host()),
 	}).Info("request's detail !")
-	RmProxyHeaders(req)
-
-	resp, err := ps.Travel.RoundTrip(req)
-	if err != nil {
-		proxyLog.WithFields(logrus.Fields{
-			"error": err,
-		}).Error("occur an error!")
-		http.Error(rw, err.Error(), 500)
-		return
+	req := &ctx.Request
+	resp := &ctx.Response
+	RmProxyReqHeaders(req)
+	if string(ctx.Method()) == http.MethodGet && config.RuntimeViper.GetBool("server.cache") {
+		ps.CacheHandler(ctx)
+	} else {
+		if err := ps.Client.Do(req, resp); err != nil {
+			proxyLog.WithError(err)
+		}
 	}
-	defer resp.Body.Close()
+	RmProxyRespHeaders(resp)
 
-	ClearHeaders(rw.Header())
-	CopyHeaders(rw.Header(), resp.Header)
-
-	rw.WriteHeader(resp.StatusCode) //写入响应状态
-
-	nr, err := io.Copy(rw, resp.Body)
-	if err != nil && err != io.EOF {
-		proxyLog.WithFields(logrus.Fields{
-			"client": ps.Browser,
-			"error":  err,
-		}).Error("occur an error when copying remote response to this client")
-		return
-	}
 	proxyLog.WithFields(logrus.Fields{
-		"response bytes": nr,
-		"request url":    req.URL.Host,
+		"response bytes": len(resp.Body()),
+		"request url":    req.URI().String(),
 	}).Info("response has been copied successfully!")
+	ps.Done(req)
 }
 
 var HTTP200 = []byte("HTTP/1.1 200 Connection Established\r\n\r\n")

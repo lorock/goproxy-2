@@ -1,18 +1,19 @@
 package api
 
 import (
-	"net/http"
 	"time"
+
+	"github.com/valyala/fasthttp"
 )
 
 type CachePool interface {
 	Get(uri string) Cache
 	Delete(uri string)
-	CheckAndStore(uri string, req *http.Request,resp *http.Response)
+	CheckAndStore(uri string, ctx *fasthttp.RequestCtx)
 	Clear(d time.Duration)
 }
 
 type Cache interface {
 	Verify() bool
-	WriteTo(rw http.ResponseWriter) (int, error)
+	WriteTo(rw *fasthttp.Response) (int64, error)
 }

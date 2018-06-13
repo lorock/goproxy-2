@@ -4,11 +4,11 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
 	"github.com/panjf2000/goproxy/interface"
+	"github.com/valyala/fasthttp"
 )
 
 func MD5Uri(uri string) string {
@@ -84,7 +84,9 @@ func (c *ConnCachePool) delete(md5Uri string) {
 	return
 }
 
-func (c *ConnCachePool) CheckAndStore(uri string, req *http.Request, resp *http.Response) {
+func (c *ConnCachePool) CheckAndStore(uri string, ctx *fasthttp.RequestCtx) {
+	req := &ctx.Request
+	resp := &ctx.Response
 	if !IsReqCache(req) || !IsRespCache(resp) {
 		return
 	}

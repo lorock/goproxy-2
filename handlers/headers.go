@@ -1,29 +1,18 @@
 package handlers
 
 import (
-	"net/http"
+	"github.com/valyala/fasthttp"
 )
 
 // CopyHeaders copy headers from source to destination.
 // Nothing would be returned.
-func CopyHeaders(dst, src http.Header) {
-	for key, values := range src {
-		for _, value := range values {
-			dst.Add(key, value)
-		}
-	}
-}
-
-// ClearHeaders clear headers.
-func ClearHeaders(headers http.Header) {
-	for key := range headers {
-		headers.Del(key)
-	}
+func CopyHeaders(dst, src *fasthttp.ResponseHeader) {
+	src.CopyTo(dst)
 }
 
 // RmProxyHeaders remove Hop-by-hop headers.
-func RmProxyHeaders(req *http.Request) {
-	req.RequestURI = ""
+func RmProxyReqHeaders(req *fasthttp.Request) {
+	req.SetRequestURI("")
 	req.Header.Del("Proxy-Connection")
 	req.Header.Del("Connection")
 	req.Header.Del("Keep-Alive")
@@ -33,4 +22,16 @@ func RmProxyHeaders(req *http.Request) {
 	req.Header.Del("Trailers")
 	req.Header.Del("Transfer-Encoding")
 	req.Header.Del("Upgrade")
+}
+
+func RmProxyRespHeaders(resp *fasthttp.Response) {
+	resp.Header.Del("Proxy-Connection")
+	resp.Header.Del("Connection")
+	resp.Header.Del("Keep-Alive")
+	resp.Header.Del("Proxy-Authenticate")
+	resp.Header.Del("Proxy-Authorization")
+	resp.Header.Del("TE")
+	resp.Header.Del("Trailers")
+	resp.Header.Del("Transfer-Encoding")
+	resp.Header.Del("Upgrade")
 }

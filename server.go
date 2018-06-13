@@ -8,8 +8,8 @@ import (
 )
 
 func main() {
-	goproxy := handlers.NewProxyServer()
+	goProxy := handlers.NewProxyServer()
 
 	log.Infof("start proxy server in port%s", config.RuntimeViper.GetString("server.port"))
-	log.Fatal(goproxy.ListenAndServe())
+	log.Fatal(goProxy.ListenAndServe())
 }

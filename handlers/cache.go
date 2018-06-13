@@ -2,16 +2,13 @@ package handlers
 
 import (
 	_ "bufio"
-	"bytes"
-	"io"
-	"io/ioutil"
-	"net/http"
 	"path"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/panjf2000/goproxy/config"
 	"github.com/panjf2000/goproxy/interface"
 	"github.com/panjf2000/goproxy/tool"
+	"github.com/valyala/fasthttp"
 )
 
 var cachePool api.CachePool
@@ -27,9 +24,11 @@ func RegisterCachePool(c api.CachePool) {
 }
 
 //CacheHandler handles "Get" request
-func (ps *ProxyServer) CacheHandler(rw http.ResponseWriter, req *http.Request) {
+func (ps *ProxyServer) CacheHandler(ctx *fasthttp.RequestCtx) {
+	req := &ctx.Request
+	resp := &ctx.Response
 
-	var uri = req.RequestURI
+	var uri = string(req.RequestURI())
 
 	c := cachePool.Get(uri)
 
@@ -38,7 +37,7 @@ func (ps *ProxyServer) CacheHandler(rw http.ResponseWriter, req *http.Request) {
 			cacheLog.WithFields(logrus.Fields{
 				"request url": uri,
 			}).Debug("Found cache!")
-			c.WriteTo(rw)
+			c.WriteTo(resp)
 			return
 		} else {
 			cacheLog.WithFields(logrus.Fields{
@@ -48,52 +47,25 @@ func (ps *ProxyServer) CacheHandler(rw http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	RmProxyHeaders(req)
-	resp, err := ps.Travel.RoundTrip(req)
-	if err != nil {
-		http.Error(rw, err.Error(), 500)
+	RmProxyReqHeaders(req)
+	if err := ps.Client.Do(req, resp); err != nil {
+		proxyLog.WithError(err)
 		return
 	}
-	defer resp.Body.Close()
 
-	cresp := new(http.Response)
-	*cresp = *resp
-	CopyResponse(cresp, resp)
+	newResp := new(fasthttp.Response)
+	resp.CopyTo(newResp)
 
 	cacheLog.WithFields(logrus.Fields{
 		"request url": uri,
 	}).Debug("Check out this cache and then stores it if it is right!")
-	go cachePool.CheckAndStore(uri, req, cresp)
+	go cachePool.CheckAndStore(uri, ctx)
 
-	ClearHeaders(rw.Header())
-	CopyHeaders(rw.Header(), resp.Header)
+	resp.Header.Reset()
+	CopyHeaders(&resp.Header, &newResp.Header)
 
-	rw.WriteHeader(resp.StatusCode) //写入响应状态
-
-	nr, err := io.Copy(rw, resp.Body)
-	if err != nil && err != io.EOF {
-		cacheLog.WithFields(logrus.Fields{
-			"client": ps.Browser,
-			"error":  err,
-		}).Error("occur an error when copying remote response to this client")
-		return
-	}
 	cacheLog.WithFields(logrus.Fields{
-		"response bytes": nr,
-		"request url":    req.URL.Host,
+		"response bytes": len(newResp.Body()),
+		"request url":    req.URI().String(),
 	}).Info("response has been copied successfully!")
-}
-
-func CopyResponse(dest *http.Response, src *http.Response) {
-
-	*dest = *src
-	var bodyBytes []byte
-
-	if src.Body != nil {
-		bodyBytes, _ = ioutil.ReadAll(src.Body)
-	}
-
-	// Restore the io.ReadCloser to its original state
-	src.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
-	dest.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 }

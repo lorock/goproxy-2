@@ -1,9 +1,6 @@
 package handlers
 
 import (
-	"math/rand"
-	"net"
-	"net/http"
 	"strconv"
 	"strings"
 
@@ -12,6 +9,7 @@ import (
 	"github.com/lafikl/liblb/r2"
 	"github.com/panjf2000/goproxy/config"
 	"github.com/panjf2000/goproxy/tool"
+	"github.com/valyala/fasthttp"
 )
 
 var r2LB *r2.R2
@@ -44,19 +42,19 @@ func init() {
 	boundedLB = bounded.New(serverNodes...)
 }
 
-func (ps *ProxyServer) Done(req *http.Request) {
+func (ps *ProxyServer) Done(req *fasthttp.Request) {
 	switch config.RuntimeViper.GetInt("server.inverse_mode") {
 	case 2:
-		p2cLB.Done(req.Host)
+		p2cLB.Done(string(req.Host()))
 	case 3:
-		boundedLB.Done(req.Host)
+		boundedLB.Done(string(req.Host()))
 	default:
 	}
 }
 
 //ReverseHandler handles request for reverse proxy.
 //处理反向代理请求
-func (ps *ProxyServer) LoadBalancing(req *http.Request) {
+func (ps *ProxyServer) LoadBalancing(req *fasthttp.Request) {
 	if config.RuntimeViper.GetBool("server.reverse") {
 		//用于反向代理，负载均衡
 		ps.loadBalancing(req)
@@ -65,7 +63,7 @@ func (ps *ProxyServer) LoadBalancing(req *http.Request) {
 
 //ReverseHandler handles request for reverse proxy.
 //处理反向代理负载均衡请求
-func (ps *ProxyServer) loadBalancing(req *http.Request) {
+func (ps *ProxyServer) loadBalancing(req *fasthttp.Request) {
 	var proxyHost string
 	mode := config.RuntimeViper.GetInt("server.inverse_mode")
 	switch mode {
@@ -78,21 +76,16 @@ func (ps *ProxyServer) loadBalancing(req *http.Request) {
 		proxyHost, _ = r2LB.Balance()
 	case 2:
 		// power of two choices (p2c)负载均衡算法选择反向服务器
-		proxyHost, _ = p2cLB.Balance(req.RemoteAddr)
+		proxyHost, _ = p2cLB.Balance(req.String())
 	case 3:
 		// 根据客户端的IP算出一个HASH值，将请求分配到集群中的某一台服务器上, 依据配置文件中设置的每个服务器的权重进行负载均衡
 		ring := tool.NewWithWeights(memcacheServers)
-		if clientIP, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
-			server, _ := ring.GetNode(clientIP)
-			proxyHost = server
-		} else {
-			proxyHost = serverNodes[rand.Intn(len(serverNodes))]
-		}
+		server, _ := ring.GetNode(req.String())
+		proxyHost = server
 	case 4:
 		// 边界一致性哈希算法选择反向服务器
-		proxyHost, _ = boundedLB.Balance(req.RemoteAddr)
+		proxyHost, _ = boundedLB.Balance(req.String())
 	}
-	req.Host = proxyHost
-	req.URL.Host = proxyHost
-	req.URL.Scheme = "http"
+	req.Header.SetHost(proxyHost)
+	req.SetHost(proxyHost)
 }

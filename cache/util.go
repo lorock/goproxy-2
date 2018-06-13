@@ -2,15 +2,16 @@ package cache
 
 import (
 	"log"
-	"net/http"
 	"strings"
+
+	"github.com/valyala/fasthttp"
 )
 
 //checks whether request ask to be stored as cache
-func IsReqCache(req *http.Request) bool {
+func IsReqCache(req *fasthttp.Request) bool {
 	log.Printf("http request header:%v", req.Header)
-	cacheControl := req.Header.Get("Cache-Control")
-	contentType := req.Header.Get("Content-Type")
+	cacheControl := string(req.Header.Peek("Cache-Control"))
+	contentType := string(req.Header.Peek("Content-Type"))
 	if cacheControl == "" && contentType == "" {
 		return true
 	} else if len(cacheControl) > 0 {
@@ -20,9 +21,9 @@ func IsReqCache(req *http.Request) bool {
 			strings.Index(cacheControl, "must-revalidate") != -1 ||
 			(strings.Index(cacheControl, "max-age") == -1 &&
 				strings.Index(cacheControl, "s-maxage") == -1 &&
-				req.Header.Get("Etag") == "" &&
-				req.Header.Get("Last-Modified") == "" &&
-				(req.Header.Get("Expires") == "" || req.Header.Get("Expires") == "0")) {
+				string(req.Header.Peek("Etag")) == "" &&
+				string(req.Header.Peek("Last-Modified")) == "" &&
+				(string(req.Header.Peek("Expires")) == "" || string(req.Header.Peek("Expires")) == "0")) {
 			return false
 		}
 
@@ -38,10 +39,10 @@ func IsReqCache(req *http.Request) bool {
 }
 
 //checks whether response can be stored as cache
-func IsRespCache(resp *http.Response) bool {
+func IsRespCache(resp *fasthttp.Response) bool {
 	log.Printf("http response header:%v", resp.Header)
-	cacheControl := resp.Header.Get("Cache-Control")
-	contentType := resp.Header.Get("Content-Type")
+	cacheControl := string(resp.Header.Peek("Cache-Control"))
+	contentType := string(resp.Header.Peek("Content-Type"))
 	if cacheControl == "" && contentType == "" {
 		return true
 	} else if len(cacheControl) > 0 {
@@ -51,9 +52,9 @@ func IsRespCache(resp *http.Response) bool {
 			strings.Index(cacheControl, "must-revalidate") != -1 ||
 			(strings.Index(cacheControl, "max-age") == -1 &&
 				strings.Index(cacheControl, "s-maxage") == -1 &&
-				resp.Header.Get("Etag") == "" &&
-				resp.Header.Get("Last-Modified") == "" &&
-				(resp.Header.Get("Expires") == "" || resp.Header.Get("Expires") == "0")) {
+				string(resp.Header.Peek("Etag")) == "" &&
+				string(resp.Header.Peek("Last-Modified")) == "" &&
+				(string(resp.Header.Peek("Expires")) == "" || string(resp.Header.Peek("Expires")) == "0")) {
 			return false
 		}
 
