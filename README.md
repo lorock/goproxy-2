@@ -1,4 +1,10 @@
-<div align="center"><img src="https://github.com/panjf2000/goproxy/blob/master/goproxy_logo.png"/></div>
+<div align="center"><img src="goproxy_logo.png"/></div>
+
+
+[![Build Status](https://travis-ci.org/panjf2000/goproxy.svg?branch=master)](https://travis-ci.org/panjf2000/goproxy)
+[![GPL Licence](https://badges.frapsoft.com/os/gpl/gpl.svg?v=103)](https://opensource.org/licenses/GPL-3.0/)
+[![Open Source Love](https://badges.frapsoft.com/os/v2/open-source.svg?v=103)](https://github.com/ellerbrock/open-source-badges/)
+
 
 # 2018.04.16更新
 ## 更换redis client
@@ -76,8 +82,7 @@ cache = true
 cache_timeout = 60
 log = 1
 log_path = "./logs"
-admin = {"admin"="root"}
-user = {"agent"="proxy"}
+user = { agent = "proxy" }
 
 [redis]
 redis_host = "127.0.0.1:6379"
@@ -99,7 +104,6 @@ max_active = 10
 - cache_timeout：redis缓存response的刷新时间，以分钟为单位
 - log：设置打log的level,1时level为Debug，0时为info
 - log_path：设置存放log的路径
-- admin：置空
 - user：代理服务器的http authentication 用户
 
 #### [redis]

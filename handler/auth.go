@@ -4,13 +4,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"os"
 	"path"
 	"strings"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/panjf2000/goproxy/config"
 	"github.com/panjf2000/goproxy/tool"
-	_ "github.com/panjf2000/goproxy/tool"
 )
 
 var HTTP407 = []byte("HTTP/1.1 407 Proxy Authorization Required\r\nProxy-Authenticate: Basic realm=\"Secure Proxys\"\r\n\r\n")
@@ -18,11 +18,12 @@ var authLog *logrus.Logger
 
 func init() {
 	logPath := config.RuntimeViper.GetString("server.log_path")
+	os.MkdirAll(logPath, os.ModePerm)
 	authLog, _ = tool.InitLog(path.Join(logPath, "auth.log"))
 
 }
 
-//Auth provides basic authorizaton for proxy server.
+//Auth provides basic authorization for proxy server.
 func (ps *ProxyServer) Auth(rw http.ResponseWriter, req *http.Request) bool {
 	var err error
 	if config.RuntimeViper.GetBool("server.auth") {
@@ -34,19 +35,16 @@ func (ps *ProxyServer) Auth(rw http.ResponseWriter, req *http.Request) bool {
 			}).Error("Fail to log in!")
 			//ps.Browser = "Anonymous"
 			return false
-		} else {
-			authLog.Info("authentication is passed!")
-			return true
 		}
-	} else {
-		ps.Browser = "Anonymous"
+		authLog.Info("authentication is passed!")
 		return true
 	}
-
+	ps.Browser = "Anonymous"
 	return true
+
 }
 
-//Auth provides basic authorizaton for proxy server.
+//Auth provides basic authorization for proxy server.
 func (ps *ProxyServer) auth(rw http.ResponseWriter, req *http.Request) (string, error) {
 
 	auth := req.Header.Get("Proxy-Authorization")
@@ -54,7 +52,7 @@ func (ps *ProxyServer) auth(rw http.ResponseWriter, req *http.Request) (string, 
 
 	if auth == "" {
 		NeedAuth(rw, HTTP407)
-		return "", errors.New("Need Proxy Authorization!")
+		return "", errors.New("need proxy authorization")
 	}
 	data, err := base64.StdEncoding.DecodeString(auth)
 	if err != nil {
@@ -62,7 +60,7 @@ func (ps *ProxyServer) auth(rw http.ResponseWriter, req *http.Request) (string, 
 			"auth":  auth,
 			"error": err,
 		}).Error("Fail to decoding Proxy-Authorization!")
-		return "", errors.New("Fail to decoding Proxy-Authorization")
+		return "", errors.New("fail to decoding Proxy-Authorization")
 	}
 
 	var user, passwd string
@@ -70,14 +68,13 @@ func (ps *ProxyServer) auth(rw http.ResponseWriter, req *http.Request) (string, 
 	userPasswdPair := strings.Split(string(data), ":")
 	if len(userPasswdPair) != 2 {
 		NeedAuth(rw, HTTP407)
-		return "", errors.New("Fail to log in")
-	} else {
-		user = userPasswdPair[0]
-		passwd = userPasswdPair[1]
+		return "", errors.New("fail to log in")
 	}
+	user = userPasswdPair[0]
+	passwd = userPasswdPair[1]
 	if Check(user, passwd) == false {
 		NeedAuth(rw, HTTP407)
-		return "", errors.New("Fail to log in")
+		return "", errors.New("fail to log in")
 	}
 	return user, nil
 }
@@ -86,7 +83,7 @@ func NeedAuth(rw http.ResponseWriter, challenge []byte) error {
 	hj, _ := rw.(http.Hijacker)
 	Client, _, err := hj.Hijack()
 	if err != nil {
-		return errors.New("Fail to get Tcp connection of Client")
+		return errors.New("fail to get Tcp connection of client")
 	}
 	defer Client.Close()
 
@@ -96,9 +93,10 @@ func NeedAuth(rw http.ResponseWriter, challenge []byte) error {
 
 // Check checks username and password
 func Check(user, passwd string) bool {
-	if user != "" && passwd != "" && config.RuntimeViper.GetStringMapString("server.user")[user] == passwd {
-		return true
-	} else {
-		return false
+	if user != "" && passwd != "" {
+		if pass, ok := config.RuntimeViper.GetStringMapString("server.user")[user]; ok && pass == passwd {
+			return true
+		}
 	}
+	return false
 }

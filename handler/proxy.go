@@ -3,8 +3,10 @@ package handler
 import (
 	_ "bufio"
 	"io"
+	"log"
 	"net"
 	"net/http"
+	"os"
 	"path"
 	"time"
 
@@ -24,11 +26,12 @@ var proxyLog *logrus.Logger
 
 func init() {
 	logPath := config.RuntimeViper.GetString("server.log_path")
+	os.MkdirAll(logPath, os.ModePerm)
 	proxyLog, _ = tool.InitLog(path.Join(logPath, "proxy.log"))
 
 }
 
-// NewProxyServer returns a new proxyserver.
+// NewProxyServer returns a new proxy server.
 func NewProxyServer() *http.Server {
 	if config.RuntimeViper.GetBool("server.cache") {
 		RegisterCachePool(cache.NewCachePool(config.RuntimeViper.GetString("redis.redis_host"),
@@ -42,6 +45,7 @@ func NewProxyServer() *http.Server {
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
+		ErrorLog:       log.New(proxyLog.Out, "[ERROR]", log.LstdFlags),
 	}
 }
 
